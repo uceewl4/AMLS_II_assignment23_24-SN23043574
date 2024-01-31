@@ -9,4 +9,4 @@ Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查�
 
 # split into furniture and home goods
 # look at the part misclassified
-# three experts: furnitu
+# three experts: furniture/home goods/misclassified samples
