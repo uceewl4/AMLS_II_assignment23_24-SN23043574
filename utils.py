@@ -12,6 +12,7 @@
 # here put the import lib
 import os
 import cv2
+import json
 import random
 import numpy as np
 import tensorflow as tf
@@ -31,6 +32,11 @@ from sklearn.metrics import (
     auc,
 )
 from image_classification.CNN import CNN
+from image_classification.MoE import MoE
+from tensorflow.keras.utils import to_categorical
+from image_classification.Multimodal import Multimodal
+
+from image_classification.pretrained import Pretrained
 
 
 """
@@ -42,10 +48,7 @@ param {*} batch_size: batch size of NNs
 return {*}: loaded model input 
 """
 
-
-def load_data(task, path, method, batch_size=None):
-    Xtest, ytest, Xtrain, ytrain, Xval, yval = [], [], [], [], [], []
-    label_map = {
+label_map = {
         "bicycle": 0,
         "cabinet": 1,
         "chair": 2,
@@ -59,6 +62,67 @@ def load_data(task, path, method, batch_size=None):
         "table": 10,
         "toaster": 11,
     }
+
+def MoEsplit(X,y):
+    X = np.array(X).astype('float32')/255   
+    y = to_categorical(y, 12)
+
+    XFur = X[[i for i in range(len(y)) if y[i] in []]]
+    XGood = X[[i for i in range(len(y)) if y[i] in []]]
+    XMis = X[[i for i in range(len(y)) if y[i] in []]]
+    yFur = y[[i for i in range(len(y)) if y[i] in []]]
+    yGood = y[[i for i in range(len(y)) if y[i] in []]]
+    yMis = y[[i for i in range(len(y)) if y[i] in []]]
+
+    yExp = np.array([2 if i in [] else (0 if i in [] else 1) for i in y])
+    yExp = to_categorical(yExp, 3)
+
+    return X, XFur, XGood, XMis, \
+            y, yExp, yFur, yGood, yMis
+
+def load_data_multimodal(type=None):
+    # seg
+    X_seg,  X_contour, X_pc, y_seg, y_contour, y_pc = [],[],[],[],[],[]
+    for i in ["segmented","contour"]:
+        folder_path = os.path.join(f"Dataset/{i}", type)
+        file = os.listdir(folder_path)
+        for f in file:
+            if not os.path.isfile(os.path.join(folder_path, f)):
+                continue
+            else:
+                img = cv2.imread(os.path.join(folder_path, f))
+                if i == "segmented":
+                    X_seg.append(img)
+                    y_seg.append(label_map[f"{f.split('_')[1]}"])
+                elif i == "contour":
+                    X_contour.append(img)
+                    y_contour.append(label_map[f"{f.split('_')[1]}"])
+               
+    # pc
+    with open(os.path.join(f"Dataset/pc", f"{type}.json")) as file:
+        features = json.load(file)
+        sorted_keys = sorted(features.keys())
+        for key in sorted_keys:
+            coor = features[key]["coordinates"] # 4096*3
+            R = features[key]["channels"]["R"]
+            G = features[key]["channels"]["G"]
+            B = features[key]["channels"]["B"]
+            channel = np.concatenate((R,G,B),axis=1)  # 4096*3
+            feature = np.concatenate((coor,channel),axis=1)  # 4096*6
+            X_pc.append(feature)
+            y_pc.append(label_map[f"{key.split('_')[1]}"])
+    print(y_seg)
+    print(y_contour)
+    print(y_pc)
+    
+    return  X_seg,  X_contour, X_pc
+
+    
+
+
+
+def load_data(task,path, method, batch_size=None):
+    Xtest, ytest, Xtrain, ytrain, Xval, yval = [], [], [], [], [], []
 
     # divide into train/validation/test dataset
     for i in ["train", "val", "test"]:
@@ -78,58 +142,10 @@ def load_data(task, path, method, batch_size=None):
                 elif "val" in f:
                     Xval.append(img)
                     yval.append(label_map[f"{f.split('_')[1]}"])
-    # Xtrain = Xtrain[:10]
-    # ytrain = ytrain[:10]
-
-    # if method in ["LR", "KNN", "SVM", "DT", "NB", "RF", "ABC", "KMeans"]:  # baselines
-    #     if task == "A":
-    #         n, h, w = np.array(Xtrain).shape
-    #         Xtrain = np.array(Xtrain).reshape(
-    #             n, h * w
-    #         )  # need to reshape gray picture into two-dimensional ones
-    #         Xval = np.array(Xval).reshape(len(Xval), h * w)
-    #         Xtest = np.array(Xtest).reshape(len(Xtest), h * w)
-    #     elif task == "B":
-    #         n, h, w, c = np.array(Xtrain).shape
-    #         Xtrain = np.array(Xtrain).reshape(n, h * w * c)
-    #         Xval = np.array(Xval).reshape(len(Xval), h * w * c)
-    #         Xtest = np.array(Xtest).reshape(len(Xtest), h * w * c)
-
-    #         # shuffle dataset
-    #         Xtrain, ytrain = shuffle(Xtrain, ytrain, random_state=42)
-    #         Xval, yval = shuffle(Xval, yval, random_state=42)
-    #         Xtest, ytest = shuffle(Xtest, ytest, random_state=42)
-
-    #         # use PCA for task B to reduce dimensionality
-    #         pca = PCA(n_components=64)
-    #         Xtrain = pca.fit_transform(Xtrain)
-    #         Xval = pca.fit_transform(Xval)
-    #         Xtest = pca.fit_transform(Xtest)
-
-    #     return Xtrain, ytrain, Xtest, ytest, Xval, yval
-
-    # else:  # pretrained or customized
-    #     n, h, w, c = np.array(Xtrain).shape
-    #     Xtrain = np.array(Xtrain)
-    #     Xval = np.array(Xval)
-    #     Xtest = np.array(Xtest)
-
-    #     """
-    #         Notice that due to large size of task B dataset, part of train and validation data is sampled for
-    #         pretrained network. However, all test data are used for performance measurement in testing procedure.
-    #     """
-    #     if task == "B":
-    #         sample_index = random.sample([i for i in range(Xtrain.shape[0])], 40000)
-    #         Xtrain = Xtrain[sample_index, :, :, :]
-    #         ytrain = np.array(ytrain)[sample_index].tolist()
-
-    #         sample_index_val = random.sample([i for i in range(Xval.shape[0])], 5000)
-    #         Xval = Xval[sample_index_val, :]
-    #         yval = np.array(yval)[sample_index_val].tolist()
-
-    #         sample_index_test = random.sample([i for i in range(Xtest.shape[0])], 7180)
-    #         Xtest = Xtest[sample_index_test, :]
-    #         ytest = np.array(ytest)[sample_index_test].tolist()
+    
+    Xtrain, ytrain = shuffle(Xtrain, ytrain, random_state=42)
+    Xval, yval = shuffle(Xval, yval, random_state=42)
+    Xtest, ytest = shuffle(Xtest, ytest, random_state=42)
 
     # no need to shuffle, sample make it messay original
     if method in [
@@ -149,9 +165,28 @@ def load_data(task, path, method, batch_size=None):
         val_ds = val_ds.map(lambda x, y: (normalization_layer(x), y))
         test_ds = test_ds.map(lambda x, y: (normalization_layer(x), y))
         return train_ds, val_ds, test_ds
-    else:
+    
+    elif method in ["MoE"]:
+        train_dataset = MoEsplit(Xtrain, ytrain)
+        val_dataset = MoEsplit(Xval, yval)
+        test_dataset = MoEsplit(Xtest, ytest)
+        return train_dataset,val_dataset,test_dataset
+    
+    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+        Xtrain = np.array(Xtrain)
+        Xval = np.array(Xval)
+        Xtest = np.array(Xtest)
+        ytrain = np.array(ytrain)
+        yval = np.array(yval)
+        ytest = np.array(ytest)
         return Xtrain, ytrain, Xtest, ytest, Xval, yval
-
+    
+    elif method == "multimodal":
+        train_dataset = (Xtrain) + load_data_multimodal("train") + (ytrain)
+        val_dataset = (Xval) + load_data_multimodal("val") + (yval)
+        test_dataset = (Xtest) + load_data_multimodal("test") + (ytest)
+        return train_dataset,val_dataset,test_dataset
+    
 
 """
 description: This function is used for loading selected model.
@@ -163,31 +198,15 @@ return {*}: constructed model
 """
 
 
-def load_model(task, method, multilabel=False, lr=0.001):
+def load_model(task, method, multilabel=False, lr=0.001, batch_size=32,epochs=10):
     if "CNN" in method:
         model = CNN(method, multilabel=multilabel, lr=lr)
-    # elif "DenseNet201" in method:
-    #     model = A_DenseNet201(method) if task == "A" else B_DenseNet201(method)
-    # elif "InceptionV3" in method:
-    #     model = A_InceptionV3(method) if task == "A" else B_InceptionV3(method)
-    # elif "MLP" in method:
-    #     model = (
-    #         A_MLP(task, method, lr=lr)
-    #         if task == "A"
-    #         else B_MLP(task, method, multilabel=multilabel, lr=lr)
-    #     )
-    # elif "MobileNetV2" in method:
-    #     model = A_MobileNetV2(method) if task == "A" else B_MobileNetV2(method)
-    # elif "ResNet50" in method:
-    #     model = A_ResNet50(method) if task == "A" else B_ResNet50(method)
-    # elif "VGG16" in method:
-    #     model = A_VGG16(method) if task == "A" else B_VGG16(method)
-    # elif method == "EnsembleNet":
-    #     model = A_EnsembleNet(lr=lr) if task == "A" else B_EnsembleNet(lr=lr)
-    # elif method == "KMeans":
-    #     model = A_KMeans() if task == "A" else B_KMeans()
-    # else:  # baselines
-    #     model = A_Baselines(method) if task == "A" else B_Baselines(method)
+    elif method == "MoE":
+        model = MoE(method, lr=lr,batch_size=batch_size, epochs=epochs)
+    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+        model = Pretrained(method, lr=lr, epochs=epochs, batch_size=batch_size)
+    elif method == "multimodal":
+        model = Multimodal(method,  lr=lr, epochs=epochs, batch_size=batch_size)
 
     return model
 

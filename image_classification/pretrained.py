@@ -30,51 +30,41 @@ class Pretrained(Model):
     def __init__(self, method=None, lr=0.001, epochs=10, batch_size=32):
         super(Pretrained, self).__init__()
 
-        # need resizing to satisfy the minimum image size need of Inception-V3
-        # 图片大小先放着看看跑出来效果怎么样
-        self.data_augmentation = tf.keras.Sequential(
-            [
-                tf.keras.layers.Resizing(75, 75, interpolation="bilinear"),
-                tf.keras.layers.Rescaling(1.0 / 255, input_shape=(75, 75, 3)),
-            ]
-        )
-
-        # 所有pretrained放在一起选择
         # pretrained model
         if method == "InceptionV3":
             self.base_model = tf.keras.applications.InceptionV3(
                 include_top=False,
                 weights="imagenet",
-                input_shape=(75, 75, 3),  # 这里可能不需要改，因为图片足够大
+                input_shape=(100, 100, 3),  # 这里可能不需要改，因为图片足够大
             )
         elif method == "ResNet50":
             self.base_model = tf.keras.applications.ResNet50(
                 include_top=False, weights="imagenet", input_shape=(32, 32, 3)
             )
-        elif method == "VGG19":
+        elif method == "VGG19":  # 0.001 64
             self.base_model = tf.keras.applications.VGG19(
                 include_top=False,
                 weights="imagenet",
-                input_shape=(75, 75, 3),  # 这里可能不需要改，因为图片足够大
+                input_shape=(100, 100, 3),  # 这里可能不需要改，因为图片足够大
             )
         elif method == "MobileNetV2":
             self.base_model = tf.keras.applications.MobileNetV2(
                 include_top=False,
                 weights="imagenet",
-                input_shape=(75, 75, 3),  # 这里可能不需要改，因为图片足够大
+                input_shape=(100, 100, 3),  # 这里可能不需要改，因为图片足够大
             )
         elif method == "NASNetMobile":
             self.base_model = tf.keras.applications.NASNetMobile(
                 include_top=False,
                 weights="imagenet",
-                input_shape=(75, 75, 3),  # 这里可能不需要改，因为图片足够大
+                input_shape=(100, 100, 3),  # 这里可能不需要改，因为图片足够大
             )
         self.base_model.trainable = False
 
         # 接fc/dense的到输出
         self.model = models.Sequential(
             [
-                self.data_augmentation,
+                # self.data_augmentation,
                 self.base_model,
                 tf.keras.layers.GlobalAveragePooling2D(),
                 tf.keras.layers.Dropout(0.2),
@@ -83,6 +73,7 @@ class Pretrained(Model):
                 tf.keras.layers.Dense(12, name="outputs"),  # 12-class classification
             ]
         )
+        self.model.build((None,100,100,3))
         self.model.summary()
 
         self.output_layer = tf.keras.models.Model(
@@ -95,13 +86,14 @@ class Pretrained(Model):
         self.lr = lr
         self.epoch = epochs
         self.batch_size = batch_size
+        self.method = method
 
         # adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=lr)
 
-        self.early_stop = EarlyStopping(
-            monitor="val_loss", patience=2, verbose=1, mode="auto"
-        )
+        # self.early_stop = EarlyStopping(
+        #     monitor="val_loss", patience=2, verbose=1, mode="auto"
+        # )
 
     """
     description: This function includes entire training process and
@@ -128,34 +120,37 @@ class Pretrained(Model):
         self.model.compile(
             optimizer=self.optimizer,
             loss=self.loss_object,
-            metrics=["sparse_categorical_accuracy"],
+            metrics=["accuracy"],
         )
 
         history = self.model.fit(
             Xtrain,
             ytrain,
-            batch_size=self.batch,
+            batch_size=self.batch_size,
             epochs=self.epoch,
             validation_data=(Xval, yval),
-            verbose=0,
-            callbacks=[self.early_stop],
+            # callbacks=[self.early_stop],
         )
 
         train_predictions = self.output_layer.predict(x=Xtrain)
-        print(train_predictions.shape)
-        print(train_predictions[0])
+        # print(train_predictions.shape)
+        # print(train_predictions[0])
 
         train_prob = tf.nn.softmax(train_predictions)  # probabilities
+        # print(train_prob)
         train_pred += np.argmax(train_prob, axis=1).tolist()
+        train_pred = np.array(train_pred)
+        # print(train_pred)
 
         train_res = {
             "train_loss": history.history["loss"],
             "train_acc": history.history["accuracy"],
-        }
+        }  
 
         val_predictions = self.output_layer.predict(x=Xval)
         val_prob = tf.nn.softmax(val_predictions)  # probabilities
         val_pred += np.argmax(val_prob, axis=1).tolist()
+        val_pred = np.array(val_pred)
 
         val_res = {
             "val_loss": history.history["val_loss"],
@@ -182,6 +177,7 @@ class Pretrained(Model):
         test_predictions = self.output_layer.predict(x=Xtest)
         test_prob = tf.nn.softmax(test_predictions)  # probabilities
         test_pred += np.argmax(test_prob, axis=1).tolist()
+        test_pred = np.array(test_pred)
 
         print("Finish training.")
 

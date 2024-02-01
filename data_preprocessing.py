@@ -12,11 +12,24 @@
 """
 
 # here put the import lib
+import json
 import os
 import cv2
-import random
 import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import warnings
+from sklearn.cluster import KMeans
+from PIL import Image
+
+# from point_e.diffusion.configs import DIFFUSION_CONFIGS, diffusion_from_config
+# from point_e.diffusion.sampler import PointCloudSampler
+# from point_e.models.download import load_checkpoint
+# from point_e.models.configs import MODEL_CONFIGS, model_from_config
+# from point_e.util.plotting import plot_point_cloud
+# import plotly.graph_objects as go
+
+warnings.filterwarnings("ignore")
 
 # """
 #     In this project, two kinds of datasets are used.
@@ -243,3 +256,129 @@ def data_preprocess():
 
 
 # data_preprocess()
+
+
+def image_segmentation(pre_data=False):
+    if pre_data == True:
+        for name in ["train", "val", "test"]:
+            pre_path = f"Datasets/preprocessed/{name}"
+            os.makedirs(f"Datasets/segmented/{name}", exist_ok=True)
+            for index, f in enumerate(os.listdir(pre_path)):
+                if not os.path.isfile(os.path.join(pre_path, f)):
+                    continue
+                else:
+                    img = cv2.imread(os.path.join(pre_path, f))
+                    features = img.reshape(-1,2)
+                    kmeans = KMeans(n_clusters=2)
+                    kmeans.fit(features)
+                    segmented_img = kmeans.cluster_centers_[kmeans.labels_].reshape(img.shape).astype(np.int32)
+                    cv2.imwrite(
+                        os.path.join(f"Datasets/segmented/{name}", f"{f}"), segmented_img
+                    )
+    else:
+        pass
+   
+# image_segmentation(pre_data=True)
+
+def image_contour(pre_data=False):
+    if pre_data == True:
+        for name in ["train", "val", "test"]:
+            pre_path = f"Datasets/preprocessed/{name}"
+            os.makedirs(f"Datasets/contour/{name}", exist_ok=True)
+            for index, f in enumerate(os.listdir(pre_path)):
+                if not os.path.isfile(os.path.join(pre_path, f)):
+                    continue
+                else:
+                    img = cv2.imread(os.path.join(pre_path, f))
+                    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+                    _, tresh = cv2.threshold(gray, np.mean(gray), 255, cv2.THRESH_BINARY_INV)
+                    contours, hierarchy = cv2.findContours(tresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                    cnt = sorted(contours, key=cv2.contourArea)[-1]
+                    mask = np.zeros(img.shape[:2], dtype="uint8")
+                    contour_img = cv2.drawContours(mask,[cnt] , -1 , (255 , 255 , 255), -1)
+                    cv2.imwrite(
+                        os.path.join(f"Datasets/contour/{name}", f"{f}"), contour_img
+                    )
+    else:
+        pass
+    
+# image_contour(pre_data=True)
+
+# def image_cloudpoint(pre_data):
+#     if pre_data == True:
+#         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+#         print('creating base model of point-e...')
+#         name = 'base40M'
+#         base_model = model_from_config(MODEL_CONFIGS[name], device)
+#         base_model.eval()
+#         base_diffusion = diffusion_from_config(DIFFUSION_CONFIGS[name])
+
+#         print('creating upsample model...')
+#         upsampler_model = model_from_config(MODEL_CONFIGS['upsample'], device)
+#         upsampler_model.eval()
+#         upsampler_diffusion = diffusion_from_config(DIFFUSION_CONFIGS['upsample'])
+
+#         print('downloading base checkpoint...')
+#         base_model.load_state_dict(load_checkpoint(name, device))
+
+#         print('downloading upsampler checkpoint...')
+#         upsampler_model.load_state_dict(load_checkpoint('upsample', device))
+
+#         sampler = PointCloudSampler(
+#                 device=device,
+#                 models=[base_model, upsampler_model],
+#                 diffusions=[base_diffusion, upsampler_diffusion],
+#                 num_points=[1024, 4096 - 1024],
+#                 aux_channels=['R', 'G', 'B'],
+#                 guidance_scale=[3.0, 3.0],
+#             )
+#         for name in ["train", "val", "test"]:
+#                 feature_dict = {}
+#                 pre_path = f"Datasets/preprocessed/{name}"
+#                 os.makedirs(f"Datasets/pc_visual_1/{name}", exist_ok=True)
+#                 os.makedirs(f"Datasets/pc_visual_2/{name}", exist_ok=True)
+#                 os.makedirs(f"Datasets/pc_feature/{name}", exist_ok=True)
+#                 for index, f in enumerate(os.listdir(pre_path)):
+#                     if not os.path.isfile(os.path.join(pre_path, f)):
+#                         continue
+#                     else:
+#                         img = cv2.imread(os.path.join(pre_path, f))
+#                         samples = None
+#                         for x in tqdm(sampler.sample_batch_progressive(batch_size=1, model_kwargs=dict(images=[img]))):
+#                             samples = x
+#                         pc = sampler.output_to_point_clouds(samples)[0]
+#                         fig = plot_point_cloud(pc, grid_size=3, fixed_bounds=((-0.75, -0.75, -0.75),(0.75, 0.75, 0.75)))
+#                         cv2.imwrite(
+#                             os.path.join(f"Datasets/pc_visual_1/{name}", f"{f}"), fig
+#                         )
+#                         fig_plotly = go.Figure(
+#                             data=[
+#                                 go.Scatter3d(
+#                                     x=pc.coords[:,0], y=pc.coords[:,1], z=pc.coords[:,2], 
+#                                     mode='markers',
+#                                     marker=dict(
+#                                     size=2,
+#                                     color=['rgb({},{},{})'.format(r,g,b) for r,g,b in zip(pc.channels["R"], pc.channels["G"], pc.channels["B"])],
+#                                 )
+#                                 )
+#                             ],
+#                             layout=dict(
+#                                 scene=dict(
+#                                     xaxis=dict(visible=False),
+#                                     yaxis=dict(visible=False),
+#                                     zaxis=dict(visible=False)
+#                                 )
+#                             ),
+#                         )
+#                         cv2.imwrite(
+#                             os.path.join(f"Datasets/point_cloud_2/{name}", f"{f}"), fig
+#                         )
+#                     feature_dict[f"{f}"] = {}
+#                     feature_dict[f"{f}"]["coordinates"] = pc.coords
+#                     feature_dict[f"{f}"]["channels"] = pc.channels
+#                     with open(f'Datasets/pc_feature/{name}.json', 'w') as file:
+#                         json.dump(feature_dict, file)
+
+#     else:
+#         pass

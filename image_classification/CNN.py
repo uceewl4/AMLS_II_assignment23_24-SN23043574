@@ -43,18 +43,21 @@ class CNN(Model):
         # network layers definition
         self.multilabel = multilabel
         self.c1 = Conv2D(
-            64, 5, padding="same", activation="relu", input_shape=(224, 224, 3)
+            32, 3, padding="same", activation="relu", input_shape=(100, 100, 3)
         )
         self.b1 = BatchNormalization()
-        self.p1 = MaxPooling2D()
-        self.c2 = Conv2D(128, 2, padding="same", activation="relu")
+        self.c2 = Conv2D(64, 3, padding="same", activation="relu")
         self.b2 = BatchNormalization()
-        self.p2 = MaxPooling2D()
-        self.dropout = Dropout(0.2)
+        self.p1 = MaxPooling2D()
+        self.dp1 = Dropout(0.3)  # 0.3 serious overfitting
+
         self.c3 = Conv2D(128, 3, padding="same", activation="relu")
         self.b3 = BatchNormalization()
-        self.p3 = MaxPooling2D()
-        self.dropout = Dropout(0.3)
+        self.c4 = Conv2D(128, 3, padding="same", activation="relu")
+        self.b4 = BatchNormalization()
+        self.p2 = MaxPooling2D()
+        self.dp2 = Dropout(0.2)  # 0.2
+
         self.fc = Flatten()
         self.d1 = Dense(256, activation="relu")
         self.d2 = Dense(64, activation="relu")
@@ -98,14 +101,18 @@ class CNN(Model):
     def call(self, x):
         x = self.c1(x)
         x = self.b1(x)
-        x = self.p1(x)
         x = self.c2(x)
         x = self.b2(x)
-        x = self.p2(x)
+        x = self.p1(x)
+        x = self.dp1(x)
+        
         x = self.c3(x)
         x = self.b3(x)
-        x = self.p3(x)
-        x = self.dropout(x)
+        x = self.c4(x)
+        x = self.b4(x)
+        x = self.p2(x)
+        x = self.dp2(x)
+
         x = self.fc(x)
         x = self.d1(x)
         x = self.d2(x)

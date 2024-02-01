@@ -33,10 +33,10 @@ if __name__ == "__main__":
     parser.add_argument("--task", type=str, default="IC", help="")
     parser.add_argument("--method", type=str, default="CNN", help="model chosen")
     parser.add_argument(
-        "--batch_size", type=int, default=32, help="batch size of NNs like MLP and CNN"
+        "--batch_size", type=int, default=64, help="batch size of NNs like MLP and CNN"
     )
-    parser.add_argument("--epochs", type=int, default=1, help="epochs of NNs")
-    parser.add_argument("--lr", type=float, default=0.001, help="learning rate of NNs")
+    parser.add_argument("--epochs", type=int, default=50, help="epochs of NNs")
+    parser.add_argument("--lr", type=float, default=0.00001, help="learning rate of NNs")
     parser.add_argument(
         "--pre_data",
         type=bool,
@@ -70,6 +70,16 @@ if __name__ == "__main__":
         train_ds, val_ds, test_ds = load_data(
             task, pre_path, method, batch_size=args.batch_size
         )
+    elif method in ["MoE","multimodal"]:
+        train_dataset, val_dataset, test_dataset = load_data(
+            task, pre_path, method, batch_size=args.batch_size
+        )
+    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+        Xtrain, ytrain, Xtest, ytest, Xval, yval = load_data(
+            task, pre_path, method, batch_size=args.batch_size
+        )
+
+
     print("Load data successfully.")
 
     # model selection
@@ -77,6 +87,8 @@ if __name__ == "__main__":
     print("Start loading model......")
     if method in ["CNN"]:
         model = load_model(task, method, args.multilabel, args.lr)
+    elif method in ["MoE","ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19","mulitmodal"]:
+        model = load_model(task, method,lr=args.lr, batch_size=args.batch_size,epochs=args.epochs)
     print("Load model successfully.")
 
     """
@@ -105,6 +117,15 @@ if __name__ == "__main__":
                 model, test_ds
             )
             print(pred_test_multilabel[:5, :])
+    elif method in ["MoE","mulitmodal"]:
+        pred_train, pred_val, ytrain, yval = model.train(train_dataset, val_dataset, test_dataset)
+        pred_test, ytest = model.test(test_dataset)
+    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+        train_res, val_res, pred_train, pred_val, ytrain, yval = model.train(
+                Xtrain, ytrain, Xval, yval
+            )
+        pred_test, ytest = model.test(Xtest,ytest)
+
 
     # metrics and visualization
     # confusion matrix, auc roc curve, metrics calculation
