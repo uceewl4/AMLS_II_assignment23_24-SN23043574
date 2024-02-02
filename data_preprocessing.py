@@ -21,6 +21,8 @@ import numpy as np
 import warnings
 from sklearn.cluster import KMeans
 from PIL import Image
+import rembg
+import random
 
 # from point_e.diffusion.configs import DIFFUSION_CONFIGS, diffusion_from_config
 # from point_e.diffusion.sampler import PointCloudSampler
@@ -382,3 +384,103 @@ def image_contour(pre_data=False):
 
 #     else:
 #         pass
+    
+def image_pencil(pre_data=False):
+    if pre_data == True:
+        # for name in ["train", "val", "test"]:  # train finish
+        for name in ["val", "test"]:  # train finish
+            pre_path = f"Datasets/preprocessed/{name}"
+            os.makedirs(f"Datasets/pencil/{name}", exist_ok=True)
+            for index, f in enumerate(os.listdir(pre_path)):
+                if not os.path.isfile(os.path.join(pre_path, f)):
+                    continue
+                else:
+                    img = Image.open(os.path.join(pre_path, f))  # 100,100,3
+                    img_no_bg = rembg.remove(img)
+                    new_img = Image.new("RGB", img.size, (255, 255, 255))  
+                    new_img.paste(img_no_bg, (0, 0), img_no_bg)  # 100,100,3
+                    new_img = cv2.cvtColor(np.array(new_img), cv2.COLOR_RGB2GRAY)
+                    blur = cv2.GaussianBlur((255 - new_img), ksize=(21, 21), sigmaX=0, sigmaY=0)
+                    dodge = lambda image, mask: cv2.divide(image, 255 - mask, scale=256)
+                    pencil_img = dodge(new_img, blur).reshape((100, 100, 1))
+                    cv2.imwrite(
+                        os.path.join(f"Datasets/pencil/{name}", f"{f}"), pencil_img
+                    )
+    else:
+        pass
+# image_pencil(pre_data=True)
+
+# rotation
+def rotation(img):
+    h, w, c = img.shape
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), 45, 1)
+    imgRot = cv2.warpAffine(img, M, (w, h))
+    return imgRot
+
+
+"""
+description: This function is used for data augmentation with width and height shifts.
+return {*}: shifted image
+"""
+
+
+# width shift & height shift
+def shift(img):
+    h, w, c = img.shape
+    H = np.float32([[1, 0, 5], [0, 1, 5]])
+    imgShift = cv2.warpAffine(img, H, (w, h))
+    return imgShift
+
+
+"""
+description: This function is used for data augmentation with shearing.
+return {*}: image after shearing
+"""
+
+
+# shear
+def shear(img):
+    h, w, c = img.shape
+    pts1 = np.float32([[0, 0], [0, h - 1], [w - 1, 0]])
+    pts2 = np.float32([[0, 0], [5, h - 5], [w - 5, 5]])
+    M = cv2.getAffineTransform(pts1, pts2)
+    imgShear = cv2.warpAffine(img, M, (w, h))
+    return imgShear
+
+
+"""
+description: This function is used for data augmentation with horizontal flip.
+return {*}: flipped image
+"""
+
+
+# horizontal flip
+def horizontalFlip(img):
+    imgFlip = cv2.flip(img, 1)
+    return imgFlip
+    
+def image_augmentation(pre_data=False):
+    if pre_data == True:
+        for name in ["train", "val", "test"]:
+            pre_path = f"Datasets/preprocessed/{name}"
+            os.makedirs(f"Datasets/augmented/{name}", exist_ok=True)
+            aug_index = random.sample([i for i in len(6000)],300) if name == "train" else \
+                random.sample([i for i in len(2400)],100)
+            for i in aug_index:
+                if not os.path.isfile(os.path.join(pre_path, os.listdir(pre_path)[i])):
+                    continue
+                else:
+                    img = cv2.imread(os.path.join(pre_path, os.listdir(pre_path)[i]))
+                    if i % 4 == 0:
+                        aug_img = horizontalFlip(img)
+                    elif i % 4 == 1:
+                        aug_img = shear(img)
+                    elif i % 4 == 2:
+                        aug_img = shift(img)
+                    elif i % 4 == 3:
+                        aug_img = rotation(img)
+                    cv2.imwrite(
+                        os.path.join(f"Datasets/augmented/{name}", f"{os.listdir(pre_path)[i]}"), aug_img
+                    )
+    else:
+        pass

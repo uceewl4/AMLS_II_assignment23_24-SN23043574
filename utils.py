@@ -37,6 +37,10 @@ from tensorflow.keras.utils import to_categorical
 from image_classification.Multimodal import Multimodal
 
 from image_classification.pretrained import Pretrained
+from image_generation.BaseGAN import BaseGAN
+from image_generation.ConGAN import ConGAN
+from image_generation.PencilGAN import PencilGAN
+from image_classification.AdvCNN import AdvCNN
 
 
 """
@@ -117,7 +121,20 @@ def load_data_multimodal(type=None):
     
     return  X_seg,  X_contour, X_pc
 
-    
+
+def load_data_augmented(type="train"):
+    X,y = [], [], [], [], [], []
+    folder_path = os.path.join("Datasets/augmented/", type)
+    file = os.listdir(folder_path)
+    for f in file:
+        if not os.path.isfile(os.path.join(folder_path, f)):
+            continue
+        else:
+            img = cv2.imread(os.path.join(folder_path, f))
+            X.append(img)
+            y.append(label_map[f"{f.split('_')[1]}"])
+
+    return X,y
 
 
 
@@ -172,7 +189,7 @@ def load_data(task,path, method, batch_size=None):
         test_dataset = MoEsplit(Xtest, ytest)
         return train_dataset,val_dataset,test_dataset
     
-    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+    elif method in ["ConGAN","PencilGAN","BaseGAN","ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
         Xtrain = np.array(Xtrain)
         Xval = np.array(Xval)
         Xtest = np.array(Xtest)
@@ -181,11 +198,21 @@ def load_data(task,path, method, batch_size=None):
         ytest = np.array(ytest)
         return Xtrain, ytrain, Xtest, ytest, Xval, yval
     
-    elif method == "multimodal":
+    elif method == "Multimodal":
         train_dataset = (Xtrain) + load_data_multimodal("train") + (ytrain)
         val_dataset = (Xval) + load_data_multimodal("val") + (yval)
         test_dataset = (Xtest) + load_data_multimodal("test") + (ytest)
         return train_dataset,val_dataset,test_dataset
+    elif method == "AdvCNN":
+        Xtrain = np.array(Xtrain + load_data_augmented("train")[0])
+        Xval = np.array(Xval + load_data_augmented("val")[0])
+        Xtest = np.array(Xtest + load_data_augmented("test")[0])
+        ytrain = np.array(ytrain + load_data_augmented("train")[1])
+        yval = np.array(yval + load_data_augmented("val")[1])
+        ytest = np.array(ytest + load_data_augmented("test")[1])
+        return Xtrain, ytrain, Xtest, ytest, Xval, yval
+
+
     
 
 """
@@ -205,8 +232,16 @@ def load_model(task, method, multilabel=False, lr=0.001, batch_size=32,epochs=10
         model = MoE(method, lr=lr,batch_size=batch_size, epochs=epochs)
     elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
         model = Pretrained(method, lr=lr, epochs=epochs, batch_size=batch_size)
-    elif method == "multimodal":
-        model = Multimodal(method,  lr=lr, epochs=epochs, batch_size=batch_size)
+    elif method == "Multimodal":
+        model = Multimodal(method, lr=lr, epochs=epochs, batch_size=batch_size)
+    elif method == "BaseGAN":
+        model = BaseGAN(method,lr=lr, epochs=epochs, batch_size=batch_size)
+    elif method == "PencilGAN":
+        model = PencilGAN(method,lr=lr, epochs=epochs, batch_size=batch_size)
+    elif method == "ConGAN":
+        model = ConGAN(method,lr=lr, epochs=epochs, batch_size=batch_size)
+    elif method == "AdvCNN":
+        model = AdvGAN(method,lr=lr, epochs=epochs, batch_size=batch_size)
 
     return model
 

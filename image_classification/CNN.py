@@ -88,8 +88,8 @@ class CNN(Model):
         self.test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy(
             name="test_accuracy"
         )
-
-        self.method = method
+    
+        self.method = method+"_multilabel" if self.multilabel == True else method
 
     """
     description: This function is the actual construction process of customized network.
@@ -155,19 +155,17 @@ class CNN(Model):
 
                         # set threshold of multilabel probability as 0.6
                         train_pred_multilabel = np.zeros_like(predictions)
-                        top3 = train_prob_multilabel.argsort()[-3:][::-1]
-                        train_pred_multilabel[
-                            top3
-                        ] = 1  # multilabel predicted labels, top3=1, others=0
+                        top3 = np.argsort(train_prob_multilabel)[:,-3:][:,::-1]
+                        for index, i in enumerate(top3.tolist()):
+                            train_pred_multilabel[index,i] = 1
 
                         # if original label belong to multilabel prediction, assume it as correct
                         # otherwise use the largest probability in multilabel prediction index
-                        if train_labels in top3:
-                            train_pred += train_labels
-                        else:
-                            train_pred += np.argmax(
-                                train_prob_multilabel, axis=1
-                            ).tolist()
+                        for index, i in enumerate(np.array(train_labels).tolist()):
+                            if train_labels[index] in top3[index]:
+                                train_pred.append(train_labels[index])
+                            else:
+                                train_pred.append(np.argmax(train_prob_multilabel[index]).tolist())
 
                     ytrain += np.array(train_labels).tolist()  # ground truth
                     loss = self.loss_object(train_labels, predictions)
@@ -201,19 +199,17 @@ class CNN(Model):
 
                                 # set threshold of multilabel probability as 0.6
                                 val_pred_multilabel = np.zeros_like(predictions)
-                                top3 = val_prob_multilabel.argsort()[-3:][::-1]
-                                val_pred_multilabel[
-                                    top3
-                                ] = 1  # multilabel predicted labels, top3=1, others=0
+                                top3 = np.argsort(val_prob_multilabel)[:,-3:][:,::-1]
+                                for index, i in enumerate(top3.tolist()):
+                                    val_pred_multilabel[index,i] = 1
 
                                 # if original label belong to multilabel prediction, assume it as correct
                                 # otherwise use the largest probability in multilabel prediction index
-                                if val_labels in top3:
-                                    val_pred += val_labels
-                                else:
-                                    val_pred += np.argmax(
-                                        val_prob_multilabel, axis=1
-                                    ).tolist()
+                                for index, i in enumerate(np.array(val_labels).tolist()):
+                                    if val_labels[index] in top3[index]:
+                                        val_pred.append(val_labels[index])
+                                    else:
+                                        val_pred.append(np.argmax(val_prob_multilabel[index]).tolist())
 
                             yval += np.array(val_labels).tolist()
                             val_loss = self.loss_object(val_labels, predictions)
@@ -308,18 +304,18 @@ class CNN(Model):
 
                 # set threshold of multilabel probability as 0.6
                 test_pred_multilabel = np.zeros_like(predictions)
-                top3 = test_prob_multilabel.argsort()[-3:][::-1]
-                test_pred_multilabel[
-                    top3
-                ] = 1  # multilabel predicted labels, top3=1, others=0
+                top3 = np.argsort(test_prob_multilabel)[:,-3:][:,::-1]
+                for index, i in enumerate(top3.tolist()):
+                    test_pred_multilabel[index,i] = 1
 
                 # if original label belong to multilabel prediction, assume it as correct
                 # otherwise use the largest probability in multilabel prediction index
-                if test_labels in top3:
-                    test_pred += test_labels
-                else:
-                    test_pred += np.argmax(test_prob_multilabel, axis=1).tolist()
-
+                for index, i in enumerate(np.array(test_labels).tolist()):
+                    if test_labels[index] in top3[index]:
+                        test_pred.append(test_labels[index])
+                    else:
+                        test_pred.append(np.argmax(test_prob_multilabel[index]).tolist())
+                        
             ytest += np.array(test_labels).tolist()  # ground truth
 
             t_loss = self.loss_object(test_labels, predictions)

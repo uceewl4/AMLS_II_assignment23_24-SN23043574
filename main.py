@@ -12,7 +12,7 @@ warnings.filterwarnings("ignore")
     code is run on UCL server with provided GPU resources, especially for NNs 
     and pretrained models.
 """
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 # export CUDA_VISIBLE_DEVICES=1  # used for setting specific GPU in terminal
 if tf.config.list_physical_devices("GPU"):
     print("Use GPU of UCL server: london.ee.ucl.ac.uk")
@@ -64,21 +64,20 @@ if __name__ == "__main__":
 
     # load data
     print("Start loading data......")
-    pre_path = "Datasets/preprocessed/"
+    pre_path = "Datasets/pencil/" if method == "pencilGAN" else "Datasets/preprocessed/"
 
-    if method in ["CNN"]:  # 500x500x3
+    if method in ["CNN"]:  # 100x100x3
         train_ds, val_ds, test_ds = load_data(
             task, pre_path, method, batch_size=args.batch_size
         )
-    elif method in ["MoE","multimodal"]:
+    elif method in ["MoE","Multimodal"]:
         train_dataset, val_dataset, test_dataset = load_data(
             task, pre_path, method, batch_size=args.batch_size
         )
-    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+    elif method in ["AdvCNN","BaseGAN","PencilGAN","ConGAN","ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
         Xtrain, ytrain, Xtest, ytest, Xval, yval = load_data(
             task, pre_path, method, batch_size=args.batch_size
         )
-
 
     print("Load data successfully.")
 
@@ -87,9 +86,11 @@ if __name__ == "__main__":
     print("Start loading model......")
     if method in ["CNN"]:
         model = load_model(task, method, args.multilabel, args.lr)
-    elif method in ["MoE","ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19","mulitmodal"]:
+    elif method in ["AdvCNN","ConGAN","PencilGAN","BaseGAN","MoE","ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19","Mulitmodal"]:
         model = load_model(task, method,lr=args.lr, batch_size=args.batch_size,epochs=args.epochs)
     print("Load model successfully.")
+    
+
 
     """
         This part includes all training, validation and testing process with encapsulated functions.
@@ -117,26 +118,32 @@ if __name__ == "__main__":
                 model, test_ds
             )
             print(pred_test_multilabel[:5, :])
-    elif method in ["MoE","mulitmodal"]:
+    elif method in ["MoE","Mulitmodal"]:
         pred_train, pred_val, ytrain, yval = model.train(train_dataset, val_dataset, test_dataset)
         pred_test, ytest = model.test(test_dataset)
-    elif method in ["ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
+    elif method in ["AdvCNN","ResNet50","InceptionV3","MobileNetV2","NASNetMobile","VGG19"]:
         train_res, val_res, pred_train, pred_val, ytrain, yval = model.train(
                 Xtrain, ytrain, Xval, yval
             )
         pred_test, ytest = model.test(Xtest,ytest)
-
+    elif method in ["BaseGAN","PencilGAN"]:
+        model.train(model,Xtrain)
+        model.generate()
+    elif  method in ["ConGAN"]:
+        model.train(model,Xtrain, ytrain)
+        model.generate()
 
     # metrics and visualization
     # confusion matrix, auc roc curve, metrics calculation
-
-    res = {
-        "train_res": get_metrics(task, ytrain, pred_train),
-        "val_res": get_metrics(task, yval, pred_val),
-        "test_res": get_metrics(task, ytest, pred_test),
-    }
-    for i in res.items():
-        print(i)
-    visual4cm(task, method, ytrain, yval, ytest, pred_train, pred_val, pred_test)
-    if task == "A":
-        visual4auc(task, method, ytrain, yval, ytest, pred_train, pred_val, pred_test)
+    if task == "IC":
+        res = {
+            "train_res": get_metrics(task, ytrain, pred_train),
+            "val_res": get_metrics(task, yval, pred_val),
+            "test_res": get_metrics(task, ytest, pred_test),
+        }
+        for i in res.items():
+            print(i)
+        if args.multilabel == True:
+            method = method + "_multilabel"
+        visual4cm(task, method, ytrain, yval, ytest, pred_train, pred_val, pred_test)
+       
